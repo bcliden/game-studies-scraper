@@ -1,5 +1,7 @@
 const cheerio = require('cheerio');
 const axios = require('axios');
+const Papa = require('papaparse');
+const fs = require('fs');
 
 let csv = [];
 
@@ -49,6 +51,10 @@ let csv = [];
     }
   }
 
-  console.log(csv);
+  let finished = Papa.unparse(csv);
+  const firstIss = issues[0].split('/')[3];
+  const lastIss = issues[issues.length-1].split('/')[3];
+  const date = new Date().toDateString().split(' ').splice(1).join('-');
+  fs.writeFileSync(`./gamestudies${firstIss}-${lastIss}-${date}.csv`, finished);
 })();
 
