@@ -3,58 +3,81 @@ const axios = require('axios');
 const Papa = require('papaparse');
 const fs = require('fs');
 
-let csv = [];
 
 (async () => {
+  console.time('time elapsed');
+  console.log('Proceeding to scrape the Game Studies website.');
+
   const {data: body} = await axios.get('http://gamestudies.org/0601/archive');
   let issues = cheerio.load(body)('#issuelist a');
-
-  // here lies list or archive urls
-  // let issues = $('#issuelist a');
   issues = Array.from(issues)
-    .map(el => el.attribs.href)
-    .filter(el => el.split('/').length === 4);
+    .map(el => el.attribs.href) // grab url of link
+    .map(url => { // remove trailing slash (if exists)
+      if ( url[url.length - 1] == '/' ) {
+        return url.substring(0, url.length -1);
+      } else {
+        return url;
+      }
+    });
+    
+  // vols 1-5 have a table layout I haven't figured out how to scrape yet
+  const newIssues = issues.filter(url => url.split('/')[3].slice(0, 2) >= 6); 
 
-  // iterate over issues
-  for (let issue of issues) {
-    let page = await axios.get(issue);
-    let $ = cheerio.load(page.data);
-    let sectionArray = [];
+  // scrape all the issues
+  const scrapedNewIssues = await Promise.all(newIssues.map(scrapeIssue));
 
-    let main = $('#main');
-    if (main[0]) { // check if #main exists
-      let blocks = main.find('div');
-      // Array.from(titles).forEach(el => console.log(el.text()));
-      console.log(issue);
-      blocks.find('.summary')
-        .each(function(i, el){ 
-          sectionArray[i] = {};
-          sectionArray[i].title = $(this).text();
-        });
-      
-      blocks.find('small')
-        .each(function (i, el) {
-          sectionArray[i].author = $(this).text().split(' ').splice(1).join(' ').trim();
-        });
+  // stich responses together. they are in sequence
+  const aggregate = scrapedNewIssues.reduce((acc, next) => {
+    return [...acc, ...next]
+  },[]);
 
-      let volume = $('.volume').text().split(' ')[1];
-      let issueno = $('.issueno').text().split(' ')[1];
-      let date = $('.date').text();
+  // parse array into CSV and write it out
+  let finished = Papa.unparse(aggregate);
 
-      sectionArray = sectionArray.map(el => {
-        return {...el, volume, issue: issueno, date };
-      })
-
-      csv = [...csv, ...sectionArray]
-    } else {
-      console.log(`issue ${issue} didn't have #main`)
-    }
-  }
-
-  let finished = Papa.unparse(csv);
-  const firstIss = issues[0].split('/')[3];
-  const lastIss = issues[issues.length-1].split('/')[3];
+  const firstIss = newIssues[0].split('/')[3];
+  const lastIss = newIssues[newIssues.length-1].split('/')[3];
   const date = new Date().toDateString().split(' ').splice(1).join('-');
+
   fs.writeFileSync(`./gamestudies${firstIss}-${lastIss}-${date}.csv`, finished);
+  console.log('All done! Please see the new csv in the project folder.');
+  console.timeEnd('time elapsed');
 })();
 
+function scrapeIssue(url) {
+  return new Promise(async function(res, rej) {
+    console.log('Scraping issue %s...', url);
+
+    const page = await axios.get(url).catch(err => {
+      console.error(err);
+      return rej(err);
+    });
+    const $ = cheerio.load(page.data);
+    
+    const blocks = $('#main').find('div');
+    let articles = [];
+
+    // build article titles
+    blocks.find('.summary')
+      .each(function(i, el){ 
+        articles[i] = {};
+        articles[i].title = $(this).text();
+      });
+    
+    // build author names
+    blocks.find('small')
+      .each(function (i, el) {
+        articles[i].author = $(this).text().split(' ').splice(1).join(' ').trim();
+      });
+
+    // grab metadata for page
+    let volume = $('.volume').text().split(' ')[1];
+    let issueno = $('.issueno').text().split(' ')[1];
+    let date = $('.date').text();
+
+    articles = articles.map(article => {
+      return { ...article, volume, issue: issueno, date };
+    });
+
+    return res(articles);
+  });
+}
