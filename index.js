@@ -31,8 +31,11 @@ const fs = require('fs');
     return [...acc, ...next]
   },[]);
 
+  const articleURLs = aggregate.map(article => article.url);
+  const citationPopulatedAggregate = await Promise.all(articleURLs.map(scrapeCitations));
   // parse array into CSV and write it out
-  let finished = Papa.unparse(aggregate);
+  // let finished = Papa.unparse(aggregate);
+  let finished = Papa.unparse(citationPopulatedAggregate);
 
   const firstIss = newIssues[0].split('/')[3];
   const lastIss = newIssues[newIssues.length-1].split('/')[3];
@@ -60,7 +63,8 @@ function scrapeIssue(url) {
     blocks.find('.summary')
       .each(function(i, el){ 
         articles[i] = {};
-        articles[i].title = $(this).text();
+        articles[i].title = $(this).text(); // title
+        articles[i].url = $(this).attr('href'); // url
       });
     
     // build author names
@@ -68,6 +72,12 @@ function scrapeIssue(url) {
       .each(function (i, el) {
         articles[i].author = $(this).text().split(' ').splice(1).join(' ').trim();
       });
+
+    // grab article hyperlinks
+    // blocks.find('.summary')
+    //   .each(function(i, el){
+
+    //   });
 
     // grab metadata for page
     let volume = $('.volume').text().split(' ')[1];
@@ -79,5 +89,44 @@ function scrapeIssue(url) {
     });
 
     return res(articles);
+  });
+}
+
+function scrapeCitations(url) {
+  return new Promise(async function(resolve, reject){
+    console.log('Scraping article %s', url);
+
+    const page = await axios.get(url).catch(err => {
+      console.error(err);
+      return rej(err);
+    });
+    const $ = cheerio.load(page.data);
+
+    const blocks = $('#main')
+      .find('h3')
+      .filter(function(i, el){
+        return $(this).val() == 'References';
+      })
+      // .nextUntil('h3') 
+    // see .next, .nextUntil
+    let citations = [];
+
+    blocks.each(function(i, el){
+      citations[i] = $(this).text();
+    });
+
+
+
+    // build article titles
+    // blocks.find('.summary')
+    //   .each(function(i, el){ 
+    //     citations[i] = {};
+    //     citations[i].title = $(this).text(); // title
+    //     citations[i].url = $(this).attr('href'); // url
+    //   });
+
+    blocks.find()
+
+    return resolve(citations);
   });
 }
