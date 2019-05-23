@@ -102,31 +102,79 @@ function scrapeCitations(url) {
     });
     const $ = cheerio.load(page.data);
 
-    const blocks = $('#main')
+    // check for <h3> headers
+    let blocks = $('#main')
       .find('h3')
       .filter(function(i, el){
-        return $(this).val() == 'References';
+        const header = $(this).text().toLowerCase().trim();
+        return isBiblio(header);
       })
-      // .nextUntil('h3') 
-    // see .next, .nextUntil
+      .nextUntil('h3');
+
+    // check for <p> headers
+    if (blocks.length === 0){
+      blocks = $('#main')
+        .find('p')
+        .filter(function(i, el){
+          const header = $(this).text().toLowerCase().trim();
+          return isBiblio(header);
+        })
+        .nextUntil('h3');      
+    }
+
+    // check for <h4> headers
+    if (blocks.length === 0){
+      blocks = $('#main')
+      .find('h4')
+      .filter(function(i, el){
+        const header = $(this).text().toLowerCase().trim();
+        return isBiblio(header);
+      })
+      .nextUntil('h4');
+    }
+    
+    // check for <b> headers
+    if (blocks.length === 0){
+      blocks = $('#main')
+      .find('b')
+      .filter(function(i, el){
+        const header = $(this).text().toLowerCase().trim();
+        return isBiblio(header);
+      })
+      .nextUntil('b');
+    }
+
+    // check for <h2> headers
+    if (blocks.length === 0){
+      blocks = $('#main')
+      .find('h2')
+      .filter(function(i, el){
+        const header = $(this).text().toLowerCase().trim();
+        return isBiblio(header);
+      })
+      .nextUntil('h2');
+    }
+
+    if (blocks.length === 0){
+      console.log()
+    }
+
     let citations = [];
 
     blocks.each(function(i, el){
       citations[i] = $(this).text();
     });
 
-
-
-    // build article titles
-    // blocks.find('.summary')
-    //   .each(function(i, el){ 
-    //     citations[i] = {};
-    //     citations[i].title = $(this).text(); // title
-    //     citations[i].url = $(this).attr('href'); // url
-    //   });
-
-    blocks.find()
-
     return resolve(citations);
   });
+}
+
+function isBiblio(str){
+  console.log(str);
+  return str == 'bibliography' 
+    || str == 'biblography:'
+    || str == 'references' 
+    || str == 'references:'
+    || str == 'works cited' 
+    || str == 'works cited:'
 }
