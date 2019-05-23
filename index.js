@@ -24,29 +24,39 @@ const fs = require('fs');
   const newIssues = issues.filter(url => url.split('/')[3].slice(0, 2) >= 6); 
 
   // scrape all the issues
-  const scrapedNewIssues = await Promise.all(newIssues.map(scrapeIssue));
+  const scrapedNewIssues = await Promise.all(newIssues.map(scrapeIssueForArticles));
 
   // stich responses together. they are in sequence
-  const aggregate = scrapedNewIssues.reduce((acc, next) => {
+  const articleAggregate = scrapedNewIssues.reduce((acc, next) => {
     return [...acc, ...next]
   },[]);
 
-  const articleURLs = aggregate.map(article => article.url);
-  const citationPopulatedAggregate = await Promise.all(articleURLs.map(scrapeCitations));
-  // parse array into CSV and write it out
-  // let finished = Papa.unparse(aggregate);
-  let finished = Papa.unparse(citationPopulatedAggregate);
+  const articleURLs = articleAggregate.map(article => article.url);
+  const citationAggregate = await Promise.all(articleURLs.map(scrapeArticleForCitations));
+
+  const totalAggregate = articleAggregate.map((el, i) => {
+    // console.log(el);
+    const citations = [...citationAggregate[i]];
+    return {...el, citations};
+  });
 
   const firstIss = newIssues[0].split('/')[3];
   const lastIss = newIssues[newIssues.length-1].split('/')[3];
   const date = new Date().toDateString().split(' ').splice(1).join('-');
 
-  fs.writeFileSync(`./gamestudies${firstIss}-${lastIss}-${date}.csv`, finished);
-  console.log('All done! Please see the new csv in the project folder.');
+  // write into JSON as well
+  fs.writeFileSync(`./gamestudies-${firstIss}-${lastIss}-${date}-with-citations.json`, JSON.stringify(totalAggregate, null, " "));
+
+  // parse array into CSV and write it out
+  // let finished = Papa.unparse(aggregate);
+  let finished = Papa.unparse(totalAggregate);
+
+  fs.writeFileSync(`./gamestudies-${firstIss}-${lastIss}-${date}-no-citations.csv`, finished);
+  console.log('All done! Please see the new json and csv in the project folder.');
   console.timeEnd('time elapsed');
 })();
 
-function scrapeIssue(url) {
+function scrapeIssueForArticles(url) {
   return new Promise(async function(res, rej) {
     console.log('Scraping issue %s...', url);
 
@@ -92,9 +102,12 @@ function scrapeIssue(url) {
   });
 }
 
-function scrapeCitations(url) {
+function scrapeArticleForCitations(url) {
   return new Promise(async function(resolve, reject){
     console.log('Scraping article %s', url);
+    if (url === 'http://gamestudies.org/1601/articles/vmkar') {
+      return resolve(await vmkarSpecialCase(url));
+    };
 
     const page = await axios.get(url).catch(err => {
       console.error(err);
@@ -155,26 +168,58 @@ function scrapeCitations(url) {
       .nextUntil('h2');
     }
 
-    if (blocks.length === 0){
-      console.log()
-    }
-
     let citations = [];
 
-    blocks.each(function(i, el){
-      citations[i] = $(this).text();
-    });
+    blocks.filter(function(i, el){
+        return $(this).text().trim().length > 0;
+      })
+      .each(function(i, el){
+        citations[i] = $(this).text().trim()
+          .replace(/[\n\r]/g, ' ') // convert an \n or \r to a space
+          .replace(/[\t]/g, ''); // remove any \t
+      });
 
     return resolve(citations);
   });
 }
 
 function isBiblio(str){
-  console.log(str);
+  // I should really just use a RexEx for this
   return str == 'bibliography' 
     || str == 'biblography:'
+    || str == 'bibliography.'
+    || str == 'reference'
     || str == 'references' 
     || str == 'references:'
     || str == 'works cited' 
     || str == 'works cited:'
+    || str == 'bibliography and ludography'
+}
+
+async function vmkarSpecialCase(url){
+  console.log("ugh");
+  const { data } = await axios.get(url);
+  const $ = cheerio.load(data);
+
+  let endSection = $('#end')
+    .contents()
+    .filter(function(i, el){
+      return el.type == 'text';
+    })
+    .map(function(i, el){
+      // console.log($(this).text());
+      return el.data.trim();
+    })
+    .filter(function(i, el){
+      return el.length > 0;
+    });
+
+  endSection = Array.from(endSection);
+  let index = endSection.findIndex(el => isBiblio(el.toLowerCase()));
+  let refs = endSection.slice(index + 1);
+
+  // this specific article has """difficult""" formatting
+  refs = [...refs.slice(0, 3), ...refs.slice(5), "Flanagan, M. (2009) Critical play. MIT Press."];
+
+  return refs;
 }
