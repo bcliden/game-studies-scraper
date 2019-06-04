@@ -50,9 +50,11 @@ const fs = require('fs');
   // parse array into CSV and write it out
   // let finished = Papa.unparse(aggregate);
   let finished = Papa.unparse(totalAggregate);
+  let finishedNoCitations = Papa.unparse(articleAggregate);
 
-  fs.writeFileSync(`./gamestudies-${firstIss}-${lastIss}-${date}-no-citations.csv`, finished);
-  console.log('All done! Please see the new json and csv in the project folder.');
+  fs.writeFileSync(`./gamestudies-${firstIss}-${lastIss}-${date}-no-citations.csv`, finishedNoCitations);
+  fs.writeFileSync(`./gamestudies-${firstIss}-${lastIss}-${date}-with-citations.csv`, finished);
+  console.log('All done! Please see the new json and csv(s) in the project folder.');
   console.timeEnd('time elapsed');
 })();
 
